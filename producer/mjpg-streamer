@@ -1,0 +1,45 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          mjpg-streamer
+# Required-Start:    $local_fs
+# Required-Stop:     $local_fs
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# X-Interactive:     false
+# Short-Description: 
+# Description:       Start/stop mjpg-streamer.
+### END INIT INFO
+
+DESC="service script"
+NAME=mjpg-streamer
+#DAEMON=
+
+set -e
+
+export LD_LIBRARY_PATH="/usr/local/lib/mjpg-streamer"
+
+do_start()
+{
+   echo "Starting mjpg_streamer..."
+   /usr/local/bin/mjpg_streamer -b -i "input_uvc.so -d /dev/video0 -r 1280x720 -f 10" -o "output_http.so -p 9090"
+}
+
+do_stop()
+{
+   echo "Stopping mjpg_streamer..."
+   /usr/bin/killall -9 mjpg_streamer
+}
+
+case "$1" in
+   start)
+      do_start
+      ;;
+   stop)
+      do_stop
+      ;;
+   *)
+      echo "Usage: $0 {start|stop}"
+      exit 1
+esac
+
+exit 0

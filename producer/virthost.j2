@@ -1,0 +1,37 @@
+server {
+	listen		{{ server.ip }}:443;
+	server_name	{{ server.name }};
+	ssl			on;
+	ssl_certificate 	/etc/ssl/{{ server.name }}.crt;
+	ssl_certificate_key 	/etc/ssl/{{ server.name }}.key;
+	ssl_client_certificate	/usr/local/share/ca-certificates/extra/{{ ssl.ca }}.crt;
+	ssl_verify_client	on;
+	ssl_dhparam		/etc/ssl/certs/dhparam.pem;
+	
+	ssl_session_timeout	60m;
+	ssl_session_cache	shared:SSL:10m;
+	ssl_protocols		TLSv1.1 TLSv1.2;
+	ssl_ciphers		EECDH+ECDSA+AESGCM:EECDH+aRSA+AESGCM:EECDH+ECDSA+SHA384:EECDH+ECDSA+SHA256:EECDH+aRSA+SHA384:EECDH+aRSA+SHA256:EECDH:EDH+aRSA:!aNULL:!eNULL:!LOW:!3DES:!MD5:!EXP:!PSK:!SRP:!DSS:!RC4;
+	ssl_prefer_server_ciphers on;
+
+        add_header              Strict-Transport-Security max-age=63072000;
+        add_header              X-Frame-Options SAMEORIGIN;
+        add_header              X-Content-Type-Options nosniff;
+ 
+        client_max_body_size    25M;
+ 
+        ## passthru to mjpegstreamer
+ 		location    / {
+    		set $pp_d http://{{ server.ip }}:9090/stream_simple.html;
+			if ( $args = 'action=stream' ) {
+      			set $pp_d http://{{ server.ip }}:9090/$is_args$args;
+ 			}
+    		if ( $args = 'action=snapshot' ) {
+      			set $pp_d http://{{ server.ip }}:9090/$is_args$args;
+    		}
+			proxy_read_timeout 86400;
+    		proxy_pass $pp_d;
+			proxy_http_version 1.1;
+  	}
+}
+

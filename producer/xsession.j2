@@ -1,0 +1,12 @@
+#!/bin/bash
+export DISPLAY=:0
+xset -display :0 -dpms
+xset -display :0 s off
+xset -display :0 s noblank
+#unclutter -display :0 -noevents -grab
+xinput --disable 6
+xinput --disable 7
+for (( ; ; ))
+do
+   python /home/{{ viewer_user }}/camViewQt.py
+done

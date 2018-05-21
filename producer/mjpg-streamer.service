@@ -1,0 +1,13 @@
+[Unit]
+Description=A server for streaming Motion-JPEG from a video capture device
+After=network.target
+
+[Service]
+Type=simple
+User=mjpg_streamer
+ExecStart=/usr/local/bin/mjpg_streamer -i "input_uvc.so -d /dev/video0 -r 1280x720 -f 10" -o "output_http.so -p 9090"
+ExecStop=/usr/bin/killall -9 mjpg_streamer
+Environment="LD_LIBRARY_PATH=/usr/local/lib/mjpg-streamer"
+
+[Install]
+WantedBy=multi-user.target
