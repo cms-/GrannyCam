@@ -1,0 +1,48 @@
+---
+- hosts: all
+  user: root
+  vars: 
+    createuser: 'ansible'
+
+  tasks:
+  - name: Setup | create user
+    command: useradd -m {{ createuser }} creates=/home/{{ createuser }}
+    become: true
+ 
+  - name: Setup | authorized key upload
+    authorized_key: user={{ createuser }}
+      key="{{ lookup('file', 'ansible-key-ecdsa.pub') }}"
+      path='/home/{{ createuser }}/.ssh/authorized_keys'
+      manage_dir=yes
+    become: true
+ 
+  - name: Sudoers | update sudoers file and validate
+    lineinfile: "dest=/etc/sudoers
+      insertafter=EOF
+      line='{{ createuser }} ALL=(ALL) NOPASSWD: ALL'
+      regexp='{{ createuser }} ALL=(ALL) NOPASSWD: ALL'
+      state=present"
+
+  - name: Config | disable remote root login
+    lineinfile: dest=/etc/ssh/sshd_config 
+      regexp=''
+      insertafter=EOF
+      line='PermitRootLogin no'
+    become: true
+    notify: reboot
+
+  - name: Config | remote default account
+    user:
+        name: config
+        state: absent
+        remove: yes
+    become: yes
+
+  handlers:
+    - name: reboot
+      command: shutdown -r now "Ansible updates triggered"
+      become: yes
+      #command: ls -lah ./ 
+      async: 0
+      poll: 0
+      ignore_errors: true

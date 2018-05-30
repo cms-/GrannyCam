@@ -1,0 +1,134 @@
+#!/usr/bin/env ansible-playbook
+---
+- hosts: all
+  gather_facts: yes
+  become_method: sudo
+  vars:
+    packages_to_install: [ git, python-pip, aptitude, fail2ban, iptables-persistent, nginx-full,
+      python-apt
+        ]
+    pip_packages_to_install: [ virtualenv, scriptine ]
+    update_cache: yes
+
+    server:
+      ip: "{{ hostvars[inventory_hostname]['ansible_eth0']['ipv4']['address'] }}"
+      name: "{{ inventory_hostname }}"
+    ssl:
+      key: "{{ server.name }}.key"
+      csr: "{{ server.name }}.csr"
+      crt: "{{ server.name }}.crt"
+      ca: cms_CA
+
+  tasks:
+    - name: Initialize machine hostname
+      template: src=templates/hostname.j2 dest=/etc/hostname
+      become: yes
+
+    - name: Update hosts to reflect hostname
+      template: src=templates/hosts.j2 dest=/etc/hosts
+      become: yes
+      notify: reboot
+
+    - name: Install Debian packages
+      apt: pkg="{{ item }}" state=installed update_cache="{{ update_cache }}"
+      with_items: "{{ packages_to_install }}"
+      become: yes
+
+    - name: Copy firewall rules
+      template: src=files/rules.v4 dest=/etc/iptables/rules.v4
+      become: yes
+
+    - name: (Re)load firewall rules
+      shell: iptables-restore < /etc/iptables/rules.v4
+      become: yes
+
+    - name: Prepare controller for crypto generation
+      local_action: file path="files/ssl/{{ server.name }}" state=directory
+      register: ssl_dir
+         
+    - name: Generate server private key
+      local_action: "shell openssl genpkey -algorithm RSA -out files/ssl/{{ server.name }}/{{ ssl.key }}"
+      args:
+        creates: "files/ssl/{{ server.name }}/{{ ssl.key }}"
+      register: generated_key
+      when: ssl_dir
+
+    - name: Generate server certificate signing request
+      local_action: 'shell openssl req -new -key files/ssl/{{ server.name }}/{{ ssl.key }} -out files/ssl/{{ server.name }}/{{ ssl.csr }} -subj "/C=CA/ST=Ontario/L=Kitchener/O=IT/CN={{ server.name }}"'
+      args:
+        creates: "files/ssl/{{ server.name }}/{{ ssl.csr }}"
+      when: ssl_dir
+    
+    - name: Generate server certificate file
+      local_action: "shell openssl x509 -req -days 356 -in files/ssl/{{ server.name }}/{{ ssl.csr }} -CA priv/{{ ssl.ca }}.crt -CAkey priv/{{ ssl.ca }}.pem -set_serial 0x$(openssl rand -hex 16) -out files/ssl/{{ server.name }}/{{ ssl.crt }}"
+      args:
+        creates: "files/ssl/{{ server.name }}/{{ ssl.crt }}"
+      register: generated_crt
+      when: ssl_dir
+
+    - name: Ensures nginx/ssl dir exists
+      file: path=/etc/ssl state=directory
+      become: yes
+
+    - name: Copy server cert file
+      copy: 
+        src: "files/ssl/{{ server.name }}/{{ server.name }}.crt" 
+        dest: "/etc/ssl/private/{{ server.name }}.crt"
+        owner: root
+        mode: 0600
+      when: generated_crt
+      become: yes
+
+    - name: Copy server key file
+      copy:
+        src: "files/ssl/{{ server.name }}/{{ server.name }}.key" 
+        dest: "/etc/ssl/private/{{ server.name }}.key"
+        owner: root
+        mode: 0600
+      when: generated_key
+      become: yes
+
+    - name: Ensures extra CA certificate directory exists
+      file: path=/usr/local/share/ca-certificates/extra state=directory
+      become: yes
+
+    - name: Copy CA certificate
+      copy:
+        src: "priv/cms_CA.crt"
+        dest: /usr/local/share/ca-certificates/extra
+      become: yes
+
+    - name: Reload CA certificate store
+      shell: update-ca-certificates
+      become: yes
+
+    - name: Create dhparam (this will take a while, go refresh yourself)
+      command: openssl dhparam -dsaparam -out /etc/ssl/certs/dhparam.pem 4096 creates=/etc/ssl/certs/dhparam.pem
+      become: yes
+
+    - name: Copy nginx server configuration
+      template: 
+        src: templates/virthost.j2 
+        dest: "/etc/nginx/sites-available/{{ server.name }}"
+      become: yes
+
+    - name: Enable nginx server configuration
+      file:
+        src: "/etc/nginx/sites-available/{{ server.name }}" 
+        dest: "/etc/nginx/sites-enabled/{{ server.name }}"
+        state: link
+      become: yes
+
+    - name: Install Python modules with pip
+      pip: name="{{ item }}"
+      with_items: "{{ pip_packages_to_install }}"
+      become: yes
+      
+  handlers:
+    - name: reboot
+      command: shutdown -r now "Ansible updates triggered"
+      become: yes
+      #command: ls -lah ./ 
+      async: 0
+      poll: 0
+      ignore_errors: true
