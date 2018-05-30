@@ -1,0 +1,63 @@
+#!/usr/bin/env ansible-playbook
+---
+- hosts: producers
+  gather_facts: yes
+  become_method: sudo
+  vars:
+    packages_to_install: [ libjpeg-dev
+        ]
+    update_cache: yes
+    mjpg: mjpg-streamer_1-1_armhf.deb
+
+  tasks:
+    - name: Copy mjpg Debian package
+      copy:
+        src: "files/{{ mjpg }}"
+        dest: "/home/{{ ansible_env.USER }}/{{ mjpg }}"
+
+    - name: Install mjpg Debian package
+      shell: "dpkg -i /home/{{ ansible_env.USER }}/{{ mjpg }}"
+      args:
+        creates: /usr/local/lib/mjpg-streamer/input_uvc.so
+      become: yes
+
+    - name: Copy mjpg systemd service script
+      copy: 
+        src: files/mjpg-streamer.service
+        dest: /etc/systemd/system/mjpg-streamer.service
+        owner: root
+        mode: 0644
+      become: yes
+
+    - name: Create mjpg unprivileged user
+      user:
+        name: mjpg_streamer
+        shell: /bin/false
+        groups: video
+      become: yes
+
+    - name: Reload systemd
+      command: systemctl daemon-reload
+      become: yes
+
+    - name: Enable an start mjpg service
+      systemd:
+        name: mjpg-streamer
+        enabled: yes
+        state: started
+      become: yes
+
+    - name: (Re)start nginx service
+      systemd:
+        name: nginx
+        state: restarted
+      become: yes
+      
+  handlers:
+    - name: reboot
+      command: shutdown -r now "Ansible updates triggered"
+      become: yes
+      #command: ls -lah ./ 
+      async: 0
+      poll: 0
+      ignore_errors: true
