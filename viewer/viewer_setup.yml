@@ -1,0 +1,58 @@
+#!/usr/bin/env ansible-playbook
+---
+- hosts: viewers
+  gather_facts: yes
+  become_method: sudo
+  vars:
+    packages_to_install: [ python-qt4, unclutter
+        ]
+    pip_packages_to_install: [ virtualenv, scriptine ]
+    update_cache: yes
+
+  tasks:
+    # viewer
+    - name: Disable xserver cursor
+      copy:
+          src: files/xserverrc
+          dest: /etc/X11/xinit/xserverrc
+          owner: root
+      become: yes
+
+    - name: Create unprivileged user
+      user:
+        name: "{{ viewer_user }}"
+        shell: /bin/false
+        home: "/home/{{ viewer_user }}"
+        groups: video
+      become: yes
+
+    - name: Copy xsession script to user
+      template: 
+        src: templates/xsession.j2 
+        dest: "/home/{{ viewer_user }}/.xsession"
+        owner: "{{ viewer_user }}"
+      become: yes
+
+    - name: Copy autologin script
+      template: 
+        src: templates/autologin.j2 
+        dest: "/etc/systemd/system/getty@tty1.service.d/autologin.conf"
+        owner: root
+      become: yes
+      notify: reboot
+
+    - name: Copy python files to user
+      copy:
+        src: files/python/
+        dest: "/home/{{ viewer_user }}/"
+        owner: "{{ viewer_user }}"
+      become: yes
+      
+  handlers:
+    - name: reboot
+      command: shutdown -r now "Ansible updates triggered"
+      become: yes
+      #command: ls -lah ./ 
+      async: 0
+      poll: 0
+      ignore_errors: true
