@@ -91,7 +91,7 @@ class parserThread(QtCore.QThread):
 
     
     def __del__(self):
-        # This is the Pythonic function that is bound to Qt thread clean-up.
+        # This is the Pythonic function that is bound to Qt thread deconstructor.
         # The exiting condition is set to ensure the thread is not reused.
         self.exiting = True
         self.wait()
@@ -117,24 +117,24 @@ class Window(QtGui.QMainWindow):
         # Ensure our screen is front and center (down in front, please).
         self.setCentralWidget(self.screen)
         
-        # Creates a JPEG stream parser thread object
+        # Creates a JPEG stream parser thread object.
         self.thread = parserThread()
-        # Defines a thread signal to be summoned when image data is available
+        # Defines a thread signal to be summoned when image data is available.
         self.connect(self.thread, QtCore.SIGNAL('updateFrame(PyQt_PyObject)'), self.updateFrame)
-
+        # Run the updateUI() function when the thread is finished.
         self.connect(self.thread, SIGNAL("finished()"), self.updateUi)
         #self.connect(self.thread, SIGNAL("terminated()"), self.updateUi)
-        # Start the parsing thread
+        # Start the parsing thread, 250 frames will be processed until thread is recycled.
         self.thread.parse(self.url, 250)
 
     def updateFrame(self, jpg):
         
-        # Runs when signal is sent from stream thread
-        # Create a QPixmap object
+        # Runs when signal is sent from stream thread.
+        # Create a QPixmap object.
         pixmap = QtGui.QPixmap()
-        # Decode data from thread as jpg
+        # Decode data from thread as jpg.
         pixmap.loadFromData(jpg)
-        # Calls the VideoScreen function to render the QPixmap image
+        # Calls the VideoScreen function to render the QPixmap image.
         self.screen.setFrame(pixmap)
 
     def updateUi(self):
@@ -147,6 +147,7 @@ if __name__ == '__main__':
 
     # Set app full screen. Received video frames will be resized to fit.
     window.setWindowFlags(QtCore.Qt.FramelessWindowHint)
+    # Running on a 720p monitor.
     window.setGeometry(0, 0, 1280, 720)
     window.show()
     sys.exit(app.exec_())
